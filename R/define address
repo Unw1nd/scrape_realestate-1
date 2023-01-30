@@ -1,0 +1,21 @@
+library(dplyr)
+library(stringr)
+#rm(list = ls())
+#bring in raw data from the download from dennis' git
+property_details <- read.csv("property_details.csv")
+
+#extract address by searching for a proceeding string
+property_details$defined_address <- sapply(property_details$pp, function(x) {
+  start_pos <- regexpr("Residence\",\"address\":{\"@type\":\"PostalAddress\",", x, fixed = TRUE)[[1]] + nchar("Residence\",\"address\":{\"@type\":\"PostalAddress\",")
+  end_pos <- start_pos + 300
+  text <- substring(x, first = start_pos, last = end_pos)
+  street_address <- str_extract(text, "streetAddress\":\"[^\"]+")[1]
+  street_address <- gsub("streetAddress\":\"", "", street_address)
+  postal_code <- str_extract(text, "postalCode\":\"[^\"]+")[1]
+  postal_code <- gsub("postalCode\":\"", "", postal_code)
+  address_region <- str_extract(text, "addressRegion\":\"[^\"]+")[1]
+  address_region <- gsub("addressRegion\":\"", "", address_region)
+  address_locality <- str_extract(text, "addressLocality\":\"[^\"]+")[1]
+  address_locality <- gsub("addressLocality\":\"", "", address_locality)
+  paste(street_address, postal_code, address_region, address_locality, sep = ", ")
+})
