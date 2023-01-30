@@ -1,0 +1,15 @@
+library(dplyr)
+library(stringr)
+#rm(list = ls())
+#bring in raw data from the download from dennis' git
+property_details <- read.csv("property_details.csv")
+
+#extract price by searching for a trailing string
+property_details$defined_price <- sapply(property_details$pp, function(x) {
+  string_to_find <- "\\\"SoldPrice\\\\\\\",\\\\\\\""
+  start_pos <- regexpr(string_to_find, x, fixed = TRUE)[[1]] - 100
+  end_pos <- start_pos + 100
+  result <- substring(x, first = start_pos, last = end_pos)
+  price <- as.numeric(gsub(",", "", gsub("\\$", "", str_extract(result, "\\$[0-9,]+"))))
+  
+})
