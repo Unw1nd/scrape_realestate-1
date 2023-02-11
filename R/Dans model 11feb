@@ -1,0 +1,87 @@
+#rm(list = ls())
+library(qs)
+library(xgboost)
+library(dplyr)
+qs::qload("C:/Users/Dan & Jo/Downloads/property_details4.qs")
+
+####THOUGHTS
+#tie seifa to long lat?
+#get the same data for the properties i'm looking at next week
+###
+
+#Clean some data
+#manipulate sold_date_f
+sold_date_f <- gsub("Sold on ", "", sold_date_f)
+split_vector <- strsplit(sold_date_f, " ")
+day_sold <- as.numeric(sapply(split_vector, "[", 1))
+month_sold <- sapply(split_vector, "[", 2)
+#make month numeric
+month_sold <- match(month_sold, month.abb)
+year_sold <- as.numeric(sapply(split_vector, "[", 3))
+
+#manipulate listing price to generate a low and high numeric vector
+listing.marketing_price_range <- gsub("k", "000", listing.marketing_price_range)
+listing.marketing_price_range<- gsub(".5m", "500000", listing.marketing_price_range)
+listing.marketing_price_range<- gsub("m", "000000", listing.marketing_price_range)
+listing.marketing_price_range_low <- as.numeric(sub("_.*", "", listing.marketing_price_range))
+  listing.marketing_price_range_high <- as.numeric(sub(".*_", "", listing.marketing_price_range))
+  
+#make listing price numeric
+  listing.price <- as.numeric(gsub("[\\$,]", "", listing.price))
+  
+
+#data frame with core columns
+x <- data.frame(  listing.price, #outcome of interest
+                  as.integer(as.factor(suburb_json)), #core
+                  as.integer(as.factor(category_f)), #categorical for house, apartment, land etc.
+          month_sold, #derived month of sale
+          year_sold, #derived year of sale
+          listing.marketing_price_range_low, #bottom of listing range
+          listing.marketing_price_range_high, #top of listing range
+          property.land_size_sq_metres, #block size
+          as.integer(as.factor(listing.construction_status)), #complete v being built
+          as.numeric(parking_f), #count parking spots
+          as.numeric(bathrooms_f), #count bathrooms
+          as.numeric(bedrooms_f)) #count bedrooms
+
+x[is.na(x)] <- 0
+x <- as.matrix(x)
+
+# Assume the first column of the matrix x is the outcome of interest
+y <- x[, 1]
+
+# Remove the first column from x to create the matrix of predictors
+X <- x[, -1]
+
+# Set up the parameters for the xgboost model
+params <- list(
+  objective = "reg:squarederror", 
+  max_depth = 3,
+  eta = 0.1,
+  subsample = 0.5,
+  colsample_bytree = 0.5
+)
+
+# Train the xgboost model with cross-validation
+cv <- xgb.cv(params = params, 
+             data = xgb.DMatrix(X, label = y),
+             nrounds = 50, 
+             nfold = 5,
+             metrics = "rmse",
+             early_stopping_rounds = 5,
+             verbose = TRUE)
+
+# Print the cross-validation results
+print(cv)
+
+# Get the best iteration number from the cross-validation results
+best_iter <- which.min(cv$evaluation_log$test_rmse_mean)
+
+# Train the xgboost model using the best iteration number and all the data
+model <- xgboost(data = xgb.DMatrix(X, label = y), 
+                 params = params, 
+                 nrounds = best_iter)
+
+# Calculate feature importance scores
+imp <- xgb.importance(model = model)
+
